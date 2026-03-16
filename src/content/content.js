@@ -208,15 +208,15 @@ function buildViewState(payload, outside, itemHtml) {
     graphSvg: outside.querySelector("#graphSvg"),
     branchLabels: outside.querySelector("#branchLabels"),
     commitsContainer: outside.querySelector("#commits-container"),
-    graphSummary: outside.querySelector("#graphSummary"),
     listSummary: outside.querySelector("#listSummary"),
-    graphHint: outside.querySelector("#graphHint"),
     branchLabelsMap: new Map(),
     graphNodes: new Map(),
     graphEdges: [],
     commitElements: new Map(),
+    activeBranchFilter: null,
     hoveredBranch: null,
-    hoveredCommit: null
+    hoveredCommit: null,
+    hoveredCommitSource: null
   };
 }
 
@@ -436,6 +436,7 @@ function renderGraph(view) {
     branchLabels.appendChild(label);
     view.branchLabelsMap.set(branch.name, label);
     attachBranchHover(label, view, branch.name);
+    label.addEventListener("click", () => toggleBranchFilter(view, branch.name));
   }
 
   const lineColors = [];
@@ -512,7 +513,7 @@ function renderGraph(view) {
       "data-branches": serializeBranches(commit.branches)
     });
 
-    node.addEventListener("mouseenter", () => setHoverState(view, commit.primaryBranch, commit.oid));
+    node.addEventListener("mouseenter", () => setHoverState(view, commit.primaryBranch, commit.oid, "graph"));
     node.addEventListener("mouseleave", scheduleHoverReset);
     svg.appendChild(node);
     view.graphNodes.set(commit.oid, [node]);
@@ -659,11 +660,12 @@ function renderCommitList(view) {
     view.commitsContainer.appendChild(node);
     view.commitElements.set(commit.oid, node);
 
-    node.addEventListener("mouseenter", () => setHoverState(view, null, commit.oid));
+    node.addEventListener("mouseenter", () => setHoverState(view, null, commit.oid, "list"));
     node.addEventListener("mouseleave", scheduleHoverReset);
 
     for (const branchChip of node.querySelectorAll("[data-branch-pill]")) {
       attachBranchHover(branchChip, view, branchChip.dataset.branch, commit.oid);
+      branchChip.addEventListener("click", () => toggleBranchFilter(view, branchChip.dataset.branch));
     }
   }
 }
@@ -694,7 +696,8 @@ function populateCommitItem(node, repoFullName, commit) {
   const branchTags = node.querySelector('[data-slot="branchTags"]');
   for (const branchName of commit.branches) {
     const branch = currentView?.branches.find((item) => item.name === branchName);
-    const chip = document.createElement("span");
+    const chip = document.createElement("button");
+    chip.type = "button";
     chip.className = "stc-branch-chip";
     chip.dataset.branchPill = "true";
     chip.dataset.branch = branchName;
@@ -705,11 +708,16 @@ function populateCommitItem(node, repoFullName, commit) {
 
 function getVisibleCommits(view) {
   let commits = view.commitsDesc;
-  if (view.hoveredBranch) {
-    commits = commits.filter((commit) => commit.branches.includes(view.hoveredBranch));
+  const branchFilter = getEffectiveBranchFilter(view);
+  if (branchFilter) {
+    commits = commits.filter((commit) => commit.branches.includes(branchFilter));
   }
 
-  if (view.hoveredCommit && commits.some((commit) => commit.oid === view.hoveredCommit)) {
+  if (
+    view.hoveredCommit &&
+    view.hoveredCommitSource === "graph" &&
+    commits.some((commit) => commit.oid === view.hoveredCommit)
+  ) {
     const activeCommit = commits.find((commit) => commit.oid === view.hoveredCommit);
     commits = [activeCommit, ...commits.filter((commit) => commit.oid !== view.hoveredCommit)];
   }
@@ -717,19 +725,33 @@ function getVisibleCommits(view) {
   return commits;
 }
 
-function setHoverState(view, branchName, commitSha) {
+function setHoverState(view, branchName, commitSha, source = null) {
   if (clearHoverTimer) {
     clearTimeout(clearHoverTimer);
     clearHoverTimer = null;
   }
 
-  if (view.hoveredBranch === (branchName || null) && view.hoveredCommit === (commitSha || null)) {
+  if (
+    view.hoveredBranch === (branchName || null) &&
+    view.hoveredCommit === (commitSha || null) &&
+    view.hoveredCommitSource === (source || null)
+  ) {
     return;
   }
 
-  view.hoveredBranch = branchName || null;
-  view.hoveredCommit = commitSha || null;
-  renderCommitList(view);
+  const nextHoveredBranch = branchName || null;
+  const nextHoveredCommit = commitSha || null;
+  const nextSource = source || null;
+  const branchFilterBefore = getEffectiveBranchFilter(view);
+  const branchFilterAfter = view.activeBranchFilter || nextHoveredBranch;
+  const needsListRender = branchFilterBefore !== branchFilterAfter || nextSource === "graph";
+
+  view.hoveredBranch = nextHoveredBranch;
+  view.hoveredCommit = nextHoveredCommit;
+  view.hoveredCommitSource = nextSource;
+  if (needsListRender) {
+    renderCommitList(view);
+  }
   syncView(view);
 }
 
@@ -743,32 +765,55 @@ function scheduleHoverReset() {
       return;
     }
 
+    const branchFilterBefore = getEffectiveBranchFilter(currentView);
+    const branchFilterAfter = currentView.activeBranchFilter || null;
+    const needsListRender = branchFilterBefore !== branchFilterAfter || currentView.hoveredCommitSource === "graph";
+
     currentView.hoveredBranch = null;
     currentView.hoveredCommit = null;
-    renderCommitList(currentView);
+    currentView.hoveredCommitSource = null;
+    if (needsListRender) {
+      renderCommitList(currentView);
+    }
     syncView(currentView);
   }, 48);
 }
 
+function toggleBranchFilter(view, branchName) {
+  if (clearHoverTimer) {
+    clearTimeout(clearHoverTimer);
+    clearHoverTimer = null;
+  }
+
+  view.activeBranchFilter = view.activeBranchFilter === branchName ? null : branchName;
+  renderCommitList(view);
+  syncView(view);
+}
+
+function getEffectiveBranchFilter(view) {
+  return view.activeBranchFilter || view.hoveredBranch;
+}
+
 function syncView(view) {
   const visibleShas = new Set(getVisibleCommits(view).map((commit) => commit.oid));
+  const branchFilter = getEffectiveBranchFilter(view);
 
   for (const [branchName, label] of view.branchLabelsMap.entries()) {
-    label.classList.toggle("is-active", branchName === view.hoveredBranch);
-    label.classList.toggle("is-dimmed", Boolean(view.hoveredBranch) && branchName !== view.hoveredBranch);
+    label.classList.toggle("is-active", branchName === branchFilter);
+    label.classList.toggle("is-dimmed", Boolean(branchFilter) && branchName !== branchFilter);
   }
 
   for (const edge of view.graphEdges) {
-    const matchesBranch = graphElementMatchesBranch(edge, view.hoveredBranch);
+    const matchesBranch = graphElementMatchesBranch(edge, branchFilter);
     edge.classList.toggle("is-hidden", !matchesBranch);
-    edge.classList.toggle("is-dimmed", Boolean(view.hoveredBranch) && !matchesBranch);
+    edge.classList.toggle("is-dimmed", Boolean(branchFilter) && !matchesBranch);
   }
 
   for (const [sha, nodes] of view.graphNodes.entries()) {
     for (const node of nodes) {
-      const branchMatch = graphElementMatchesBranch(node, view.hoveredBranch);
+      const branchMatch = graphElementMatchesBranch(node, branchFilter);
       node.classList.toggle("is-hidden", !branchMatch);
-      node.classList.toggle("is-dimmed", Boolean(view.hoveredBranch) && !branchMatch);
+      node.classList.toggle("is-dimmed", Boolean(branchFilter) && !branchMatch);
       node.classList.toggle("is-active", sha === view.hoveredCommit);
     }
   }
@@ -780,30 +825,26 @@ function syncView(view) {
     element.hidden = !isVisible;
 
     for (const chip of element.querySelectorAll("[data-branch-pill]")) {
-      const chipMatches = !view.hoveredBranch || chip.dataset.branch === view.hoveredBranch;
-      chip.classList.toggle("is-active", chip.dataset.branch === view.hoveredBranch);
+      const chipMatches = !branchFilter || chip.dataset.branch === branchFilter;
+      chip.classList.toggle("is-active", chip.dataset.branch === branchFilter);
       chip.classList.toggle("is-dimmed", !chipMatches);
     }
   }
 
-  view.graphSummary.textContent = `${view.branches.length} branches loaded • newest commit stays on the right`;
-
-  if (view.hoveredBranch) {
-    view.listSummary.textContent = `${visibleShas.size} commits in ${view.hoveredBranch}`;
-    view.graphHint.textContent = view.hoveredCommit
-      ? `${view.hoveredBranch} isolated • ${view.hoveredCommit.slice(0, 7)} pinned at the top of the list`
-      : `${view.hoveredBranch} isolated`;
+  if (branchFilter) {
+    view.listSummary.textContent = `${visibleShas.size} commits in ${branchFilter}`;
     return;
   }
 
   if (view.hoveredCommit) {
-    view.listSummary.textContent = `${visibleShas.size} commits • ${view.hoveredCommit.slice(0, 7)} pinned first`;
-    view.graphHint.textContent = "Hovered commit is highlighted across every loaded branch lane.";
+    view.listSummary.textContent =
+      view.hoveredCommitSource === "graph"
+        ? `${visibleShas.size} commits • ${view.hoveredCommit.slice(0, 7)} pinned first`
+        : `${visibleShas.size} commits • ${view.hoveredCommit.slice(0, 7)} highlighted`;
     return;
   }
 
   view.listSummary.textContent = `${view.commitsAsc.length} commits loaded`;
-  view.graphHint.textContent = "Hover a branch lane or commit to isolate it.";
 }
 
 function attachBranchHover(element, view, branchName, commitSha = null) {

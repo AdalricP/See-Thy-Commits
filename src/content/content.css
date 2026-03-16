@@ -154,13 +154,6 @@
   vector-effect: non-scaling-stroke;
 }
 
-.stc-graph-hint {
-  margin: 0;
-  padding: 0 22px 18px;
-  color: var(--fgColor-muted, #8b949e);
-  font-size: 12px;
-}
-
 .stc-shell--list {
   overflow: hidden;
 }
@@ -173,14 +166,19 @@
 
 .stc-commit-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin: 0 16px 12px;
-  border: 1px solid rgba(240, 246, 252, 0.08);
-  border-radius: 14px;
-  background: rgba(13, 17, 23, 0.86);
-  transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: opacity 120ms ease;
+}
+
+.stc-commit-item.Box-row {
+  border-top: 1px solid rgba(240, 246, 252, 0.06);
 }
 
 .stc-commit-item__main {
@@ -211,7 +209,15 @@
   margin-left: auto;
 }
 
+.stc-commit-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  align-self: center;
+}
+
 .stc-branch-chip {
+  appearance: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -223,6 +229,7 @@
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
+  cursor: pointer;
   transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease, opacity 120ms ease;
 }
 
@@ -231,9 +238,7 @@
 }
 
 .stc-commit-item.is-active {
-  border-color: rgba(88, 166, 255, 0.55);
-  transform: translateY(-1px);
-  box-shadow: 0 12px 32px rgba(56, 139, 253, 0.16);
+  background: transparent;
 }
 
 .stc-commit-item.is-dimmed {
@@ -242,7 +247,7 @@
 
 .stc-branch-label.is-active {
   border-color: rgba(88, 166, 255, 0.45);
-  background: var(--button-default-bgColor-hover, #30363d);
+  background: rgba(22, 27, 34, 0.92);
 }
 
 .stc-branch-label.is-dimmed {
@@ -270,7 +275,7 @@
 
 .stc-branch-chip.is-active {
   border-color: rgba(88, 166, 255, 0.45);
-  background: rgba(56, 139, 253, 0.1);
+  background: rgba(22, 27, 34, 0.92);
   color: var(--fgColor-default, #e6edf3);
 }
 
