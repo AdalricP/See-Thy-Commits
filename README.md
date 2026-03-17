@@ -1,23 +1,12 @@
 # See thy commits
 
-Chrome extension that injects a GitHub-style commit graph into repository pages on `github.com`.
+Quick extension to show an interactive commit graph.
 
-## Features
+<img width="3336" height="1700" alt="image" src="https://github.com/user-attachments/assets/1d972714-3f3f-4b97-8a0e-f2a6e8dd2249" />
 
-- Public repositories load without authentication.
-- Private repositories work with a saved GitHub personal access token.
-- Graph panel is rendered directly on GitHub repository pages and stays close to the native dark commit-page look.
+## For private repos:
 
-## Load locally
-
-1. Open `chrome://extensions`.
-2. Enable Developer mode.
-3. Click `Load unpacked`.
-4. Select this repository directory.
-
-## Private repositories
-
-1. Create a GitHub personal access token with repo read access.
+1. Create a GitHub personal access token with Content set to read access.
 2. Open the extension popup.
 3. Save the token.
 
